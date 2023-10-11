@@ -79,12 +79,19 @@ int GetKey (void)  {
 #if EN_USART1_RX   //如果使能了接收
 //串口1中断服务程序
 //注意,读取USARTx->SR能避免莫名其妙的错误   	
-u8 USART_RX_BUF[USART_REC_LEN];     //接收缓冲,最大USART_REC_LEN个字节.
+u8 USART_RX_BUF[USART_REC_LEN] = {0};     //接收缓冲,最大USART_REC_LEN个字节.
 //接收状态
 //bit15，	接收完成标志
 //bit14，	接收到0x0d
 //bit13~0，	接收到的有效字节数目
-u16 USART_RX_STA=0;       //接收状态标记	  
+u16 USART_RX_STA=0;       //接收状态标记	
+
+uart_cmd_t cmd_list[CMD_NUM] = {	{"help", 					    _cmd_help},
+									{"start_jump", 			  _cmd_start_jump},
+									{"start_ymodem", 		_cmd_start_ymodem},
+									};
+
+
   
 void uart_init(u32 bound)
 {
@@ -128,6 +135,60 @@ void uart_init(u32 bound)
 
 }
 
+static void JumpToApplication(void)
+{
+    uint32_t JumpAddress = *(__IO uint32_t*) (APPLICATION_ADDRESS + 4);
+    pFunction Jump = (pFunction) JumpAddress;
+	
+	__DMB();
+	SCB->VTOR = APPLICATION_ADDRESS;
+	__DMB();
+    
+    __set_MSP(*(__IO uint32_t*) APPLICATION_ADDRESS);
+
+    Jump();
+}
+
+void _cmd_help(const char *cmd)
+{
+	uint8_t i;
+	cmd = cmd;
+	printf("******** cmd list ********\n");
+	for (i = 0 ;i < CMD_NUM; i++)
+	{
+		printf("cmd %d:      %s\n", i, cmd_list[i].cmd);
+	}
+}
+
+void _cmd_start_jump(const char *cmd)
+{
+	cmd = cmd;
+	printf("start jump\n");
+
+	JumpToApplication();
+}
+
+void _cmd_start_ymodem(const char *cmd)
+{
+	cmd = cmd;
+}
+
+
+static void _uart_recieve_handle(const char *pbuff)
+{
+	uint8_t i, cmd_len;
+
+	for (i = 0 ;i < CMD_NUM; i++)
+	{
+		cmd_len = strlen(cmd_list[i].cmd);
+		if (strncmp(pbuff, cmd_list[i].cmd, cmd_len) == 0)
+		{
+			cmd_list[i].cmd_handle(pbuff);
+			return;
+		}
+	}
+}
+
 void USART1_IRQHandler(void)                	//串口1中断服务程序
 {
 	u8 Res;
@@ -135,28 +196,33 @@ void USART1_IRQHandler(void)                	//串口1中断服务程序
 	OSIntEnter();    
 #endif
 	if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)  //接收中断(接收到的数据必须是0x0d 0x0a结尾)
-		{
+	{
 		Res =USART_ReceiveData(USART1);	//读取接收到的数据
 		
 		if((USART_RX_STA&0x8000)==0)//接收未完成
-			{
+		{
 			if(USART_RX_STA&0x4000)//接收到了0x0d
+			{
+				if(Res!=0x0a)
+					USART_RX_STA=0;//接收错误,重新开始
+				else//接收完成了 
 				{
-				if(Res!=0x0a)USART_RX_STA=0;//接收错误,重新开始
-				else USART_RX_STA|=0x8000;	//接收完成了 
-				}
+					_uart_recieve_handle((char *)USART_RX_BUF);
+					USART_RX_STA = 0;
+				}	
+			}
 			else //还没收到0X0D
-				{	
+			{	
 				if(Res==0x0d)USART_RX_STA|=0x4000;
 				else
-					{
+				{
 					USART_RX_BUF[USART_RX_STA&0X3FFF]=Res ;
 					USART_RX_STA++;
 					if(USART_RX_STA>(USART_REC_LEN-1))USART_RX_STA=0;//接收数据错误,重新开始接收	  
-					}		 
-				}
-			}   		 
-     } 
+				}		 
+			}
+		}   		 
+    } 
 #if SYSTEM_SUPPORT_OS 	//如果SYSTEM_SUPPORT_OS为真，则需要支持OS.
 	OSIntExit();  											 
 #endif
