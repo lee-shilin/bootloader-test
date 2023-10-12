@@ -49,6 +49,9 @@ void uart_init(u32 bound);
 void _cmd_help(const char *cmd);
 void _cmd_start_jump(const char *cmd);
 void _cmd_start_ymodem(const char *cmd);
+void JumpToApplication(void);
+extern u8 jump_flag; 
+
 
 #endif
 

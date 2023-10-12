@@ -86,6 +86,8 @@ u8 USART_RX_BUF[USART_REC_LEN] = {0};     //接收缓冲,最大USART_REC_LEN个字节.
 //bit13~0，	接收到的有效字节数目
 u16 USART_RX_STA=0;       //接收状态标记	
 
+
+u8 jump_flag = 0;
 uart_cmd_t cmd_list[CMD_NUM] = {	{"help", 					    _cmd_help},
 									{"start_jump", 			  _cmd_start_jump},
 									{"start_ymodem", 		_cmd_start_ymodem},
@@ -135,7 +137,7 @@ void uart_init(u32 bound)
 
 }
 
-static void JumpToApplication(void)
+void JumpToApplication(void)
 {
     uint32_t JumpAddress = *(__IO uint32_t*) (APPLICATION_ADDRESS + 4);
     pFunction Jump = (pFunction) JumpAddress;
@@ -154,7 +156,7 @@ void _cmd_help(const char *cmd)
 	uint8_t i;
 	cmd = cmd;
 	printf("******** cmd list ********\n");
-	for (i = 0 ;i < CMD_NUM; i++)
+	for (i = 1;i < CMD_NUM; i++)//0 is help
 	{
 		printf("cmd %d:      %s\n", i, cmd_list[i].cmd);
 	}
@@ -165,7 +167,7 @@ void _cmd_start_jump(const char *cmd)
 	cmd = cmd;
 	printf("start jump\n");
 
-	JumpToApplication();
+	jump_flag = 1;
 }
 
 void _cmd_start_ymodem(const char *cmd)
